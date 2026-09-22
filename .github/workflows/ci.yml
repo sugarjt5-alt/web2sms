@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      - run: npm install
+      - run: node -e "require('./src/server.js')" &
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/web2sms
+          REDIS_HOST: localhost
+          JWT_SECRET: test-secret
+        continue-on-error: true
+      # Тестүүд нэмэгдэх үед энд `npm test` дуудна
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm install
+      - run: npm run build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t web2sms-backend:ci ./backend
+      - name: Build frontend image
+        run: docker build -t web2sms-frontend:ci ./frontend
