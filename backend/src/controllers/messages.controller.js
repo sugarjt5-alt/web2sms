@@ -92,6 +92,7 @@ async function getMessages(req, res) {
 }
 
 // Нэг мессежийн дэлгэрэнгүй + хүлээн авагч тус бүрийн sent/failed status
+// Нэг мессежийн дэлгэрэнгүй + хүлээн авагч тус бүрийн sent/failed status
 async function getMessageById(req, res) {
   try {
     const id = parseId(req.params.id);
