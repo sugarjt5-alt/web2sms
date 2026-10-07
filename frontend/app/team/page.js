@@ -96,8 +96,7 @@ export default function TeamPage() {
           </div>
           <div className="card">
             <EmptyState icon="building" title="Ажилтантай ажиллах уу?">
-              Хувь хүний бүртгэлд ажилтан нэмэх боломжгүй. Багаараа ажиллах бол{' '}
-              <a href="/register?type=organization" className="link">байгууллагаар бүртгүүлнэ</a> үү.
+              Хувь хүний бүртгэлд ажилтан нэмэх боломжгүй. Байгууллагаар ажиллах бол админтай холбогдоно уу.
             </EmptyState>
           </div>
         </div>

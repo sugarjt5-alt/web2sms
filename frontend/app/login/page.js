@@ -65,8 +65,7 @@ export default function LoginPage() {
         </button>
       </form>
       <p className="auth-foot">
-        Бүртгэлгүй юу? <a href="/register" className="link">Хувь хүн</a> эсвэл{' '}
-        <a href="/register?type=organization" className="link">байгууллагаар</a> бүртгүүлэх
+        Бүртгэлгүй юу? <a href="/register" className="link">Бүртгүүлэх</a>
       </p>
     </AuthLayout>
   );

@@ -30,30 +30,20 @@ function publicUser(row) {
   };
 }
 
-// Бүртгүүлэх: хувь хүн эсвэл байгууллага.
-// Хоёулаа дотооддоо "байгууллага" (кредит, харилцагч эзэмших нэгж) үүсгэж, бүртгүүлсэн хүнийг эзэн болгоно.
-// Хувь хүний хувьд байгууллагын нэр = тухайн хүний нэр, ажилтан нэмэх боломжгүй.
+// Бүртгүүлэх: зөвхөн хувь хүнээр. Байгууллагыг admin үүсгэнэ (Байгууллагууд хуудас эсвэл CSV импорт).
+// Дотооддоо "individual" төрлийн бүртгэл (кредит эзэмших нэгж) үүсгэж, бүртгүүлсэн хүнийг эзэн болгоно.
 async function register(req, res) {
   const client = await pool.connect();
   try {
     const { name, password } = req.body;
     const email = normalizeEmail(req.body.email);
-    const type = req.body.accountType === 'individual' ? 'individual' : 'organization';
+    const type = 'individual';
     const phone = normalizePhone(String(req.body.phone || ''));
-    const registrationNo = String(req.body.registrationNo || '').trim();
-    const organizationName = type === 'individual'
-      ? String(name || '').trim()
-      : String(req.body.organizationName || '').trim();
+    const organizationName = String(name || '').trim();
 
     const invalid = validateNewUser({ name, email, password });
     if (invalid) return res.status(400).json({ message: invalid });
     if (!phone) return res.status(400).json({ message: 'Утасны дугаар буруу байна (жишээ: 99112233)' });
-    if (type === 'organization') {
-      if (!organizationName) return res.status(400).json({ message: 'Байгууллагын нэр шаардлагатай' });
-      if (!/^\d{7}$/.test(registrationNo)) {
-        return res.status(400).json({ message: 'Байгууллагын регистрийн дугаар 7 оронтой тоо байна' });
-      }
-    }
 
     const existing = await client.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
     if (existing.rows.length > 0) {
@@ -71,8 +61,7 @@ async function register(req, res) {
     const org = await client.query(
       `INSERT INTO organizations (name, credits, type, registration_no, phone)
        VALUES ($1, $2, $3, $4, $5) RETURNING id, name, type`,
-      [organizationName.slice(0, 150), SIGNUP_FREE_CREDITS, type,
-        type === 'organization' ? registrationNo : null, phone]
+      [organizationName.slice(0, 150), SIGNUP_FREE_CREDITS, type, null, phone]
     );
     const orgId = org.rows[0].id;
 
