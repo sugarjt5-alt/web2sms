@@ -368,11 +368,6 @@ code.inline { background: var(--surface-2); border: 1px solid var(--border); bor
 .auth-brand.admin { background: linear-gradient(140deg, #020617 0%, #0f172a 50%, #1e293b 100%); }
 .auth-brand h2 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; max-width: 440px; }
 .auth-brand p { opacity: 0.8; margin-top: 14px; max-width: 420px; font-size: 15px; }
-.auth-features { display: flex; flex-direction: column; gap: 14px; margin-top: 32px; }
-.auth-feature { display: flex; gap: 12px; align-items: center; font-size: 14px; opacity: 0.92; }
-.auth-feature span:first-child {
-  width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,0.14); display: grid; place-items: center;
-}
 .auth-main { display: flex; align-items: center; justify-content: center; padding: 40px 24px; background: var(--surface); }
 .auth-card { width: 100%; max-width: 380px; }
 .auth-card h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }

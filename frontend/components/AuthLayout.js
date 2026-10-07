@@ -1,12 +1,5 @@
 import Icon from './Icon';
 
-const FEATURES = [
-  { icon: 'zap', text: 'Мянга мянган хүн рүү нэг товшилтоор SMS' },
-  { icon: 'contacts', text: 'Харилцагч, бүлгээ Excel/CSV-ээс оруулах' },
-  { icon: 'history', text: 'Хүлээн авагч бүрийн хүргэлтийн төлөв' },
-  { icon: 'building', text: 'Байгууллагын багаараа хамтран ажиллах' },
-];
-
 // Хэрэглэгч / Admin нэвтрэх хуудас хооронд сэлгэх
 export function LoginSwitch({ active }) {
   return (
@@ -42,14 +35,6 @@ export default function AuthLayout({ variant, children }) {
             <>
               <h2>Байгууллагын бөөний SMS үйлчилгээ</h2>
               <p>Харилцагчиддаа мэдэгдэл, урамшуулал, сануулгыг хурдан, найдвартай хүргэ.</p>
-              <div className="auth-features">
-                {FEATURES.map((f) => (
-                  <div className="auth-feature" key={f.text}>
-                    <span><Icon name={f.icon} size={16} /></span>
-                    <span>{f.text}</span>
-                  </div>
-                ))}
-              </div>
             </>
           )}
         </div>
