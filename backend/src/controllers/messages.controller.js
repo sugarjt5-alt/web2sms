@@ -1,121 +1,128 @@
 const pool = require('../config/db');
-const smsQueue = require('../queue/smsQueue');
+const {
+  MessageError, parseSchedule, createMessage, cancelMessage,
+} = require('../services/messageService');
+const { parseId } = require('../services/validate');
+const { RECIPIENT_SUMMARY_JOIN, RECIPIENT_SUMMARY_COLUMNS } = require('../services/recipientSummary');
 
-// Bulk SMS илгээх: contactIds шууд эсвэл groupId-аар дамжуулж болно
+function sendError(res, err) {
+  if (err instanceof MessageError) {
+    return res.status(err.status).json({ message: err.message, ...err.extra });
+  }
+  console.error(err);
+  return res.status(500).json({ message: 'Серверийн алдаа' });
+}
+
+// Bulk SMS илгээх (зөвхөн системийн admin) — бүртгэлтэй хэрэглэгчдийн утас руу:
+//   audience: 'individuals' | 'organizations' | 'all', эсвэл
+//   organizationIds — сонгосон хувь хэрэглэгч/байгууллагууд.
+// Утасгүй, хаагдсан бүртгэл орохгүй. scheduledAt өгвөл тухайн цагт илгээнэ.
+// Мессеж дэх {нэр} нь хувь хүний / байгууллагын нэрээр солигдоно. Admin-аас кредит хасагдахгүй.
 async function sendMessage(req, res) {
-  const client = await pool.connect();
+  const orgId = req.user.organizationId;
+  const { content, audience, organizationIds } = req.body;
+
   try {
-    const { content, contactIds, groupId } = req.body;
-
-    if (!content || !content.trim()) {
-      return res.status(400).json({ message: 'Мессежийн агуулга шаардлагатай' });
+    const scheduledAt = parseSchedule(req.body.scheduledAt);
+    if (!audience && !Array.isArray(organizationIds)) {
+      throw new MessageError(400, 'Хүлээн авагч сонгоно уу');
     }
 
-    let recipients = []; // [{ contact_id, phone }]
-
-    if (groupId) {
-      const result = await pool.query(
-        `SELECT c.id AS contact_id, c.phone FROM contacts c
-         JOIN group_contacts gc ON gc.contact_id = c.id
-         JOIN contact_groups g ON g.id = gc.group_id
-         WHERE gc.group_id = $1 AND g.user_id = $2`,
-        [groupId, req.user.id]
-      );
-      recipients = result.rows;
-    } else if (Array.isArray(contactIds) && contactIds.length > 0) {
-      const result = await pool.query(
-        `SELECT id AS contact_id, phone FROM contacts WHERE id = ANY($1) AND user_id = $2`,
-        [contactIds, req.user.id]
-      );
-      recipients = result.rows;
-    }
-
-    if (recipients.length === 0) {
-      return res.status(400).json({ message: 'Хүлээн авагч олдсонгүй' });
-    }
-
-    await client.query('BEGIN');
-
-    const messageResult = await client.query(
-      `INSERT INTO messages (user_id, content, status, total)
-       VALUES ($1, $2, 'processing', $3) RETURNING *`,
-      [req.user.id, content, recipients.length]
+    const types = audience === 'individuals' ? ['individual']
+      : audience === 'organizations' ? ['organization'] : ['individual', 'organization'];
+    const ids = Array.isArray(organizationIds)
+      ? organizationIds.map(Number).filter((n) => Number.isInteger(n) && n > 0) : null;
+    const result = await pool.query(
+      `SELECT id AS recipient_org_id, type AS recipient_type, phone, name FROM organizations
+       WHERE phone IS NOT NULL AND is_active AND id <> $1
+         AND ($2::int[] IS NULL OR id = ANY($2::int[]))
+         AND ($2::int[] IS NOT NULL OR type = ANY($3::text[]))`,
+      [orgId, ids, types]
     );
-    const message = messageResult.rows[0];
+    const recipients = result.rows;
 
-    // Хүлээн авагч бүрд message_recipients мөр үүсгээд, дараа нь queue-д job push хийнэ
-    const insertedRecipients = [];
-    for (const r of recipients) {
-      const rec = await client.query(
-        `INSERT INTO message_recipients (message_id, contact_id, phone, status)
-         VALUES ($1, $2, $3, 'pending') RETURNING id, phone`,
-        [message.id, r.contact_id, r.phone]
-      );
-      insertedRecipients.push(rec.rows[0]);
-    }
+    const message = await createMessage({
+      organizationId: orgId, userId: req.user.id, source: 'web',
+      content, recipients, scheduledAt, unlimited: req.user.role === 'admin',
+    });
 
-    await client.query('COMMIT');
-
-    // Queue-д ажлуудыг тавих (transaction-оос гадуур, DB бичигдсэний дараа)
-    for (const rec of insertedRecipients) {
-      await smsQueue.add('send-sms', {
-        recipientId: rec.id,
-        phone: rec.phone,
-        content,
-        messageId: message.id,
-      });
-    }
-
-    res.status(201).json({ message: 'SMS илгээх дараалалд орлоо', data: message });
+    res.status(201).json({
+      message: scheduledAt ? 'SMS хуваарьт орлоо' : 'SMS илгээх дараалалд орлоо',
+      data: message,
+    });
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ message: 'Серверийн алдаа' });
-  } finally {
-    client.release();
+    sendError(res, err);
   }
 }
 
-// SMS түүх харах
+// Хуваарьт илгээлтийг цуцлах
+async function cancelScheduled(req, res) {
+  const messageId = parseId(req.params.id);
+  if (!messageId) return res.status(404).json({ message: 'Мессеж олдсонгүй' });
+  try {
+    const message = await cancelMessage({
+      organizationId: req.user.organizationId,
+      messageId,
+      userId: req.user.id,
+    });
+    res.json({ message: 'Илгээлт цуцлагдаж, кредит буцаагдлаа', data: message });
+  } catch (err) {
+    sendError(res, err);
+  }
+}
+
+// SMS түүх харах. Илгээлт бүрт хүлээн авагчдыг төрлөөр нь (байгууллага / харилцагч)
+// тоолж, эхний 3 нэрийг буцаана.
 async function getMessages(req, res) {
   try {
     const result = await pool.query(
-      `SELECT * FROM messages WHERE user_id = $1 ORDER BY created_at DESC`,
-      [req.user.id]
+      `SELECT m.*, u.name AS user_name, k.name AS api_key_name, ${RECIPIENT_SUMMARY_COLUMNS}
+       FROM messages m
+       LEFT JOIN users u ON u.id = m.user_id
+       LEFT JOIN api_keys k ON k.id = m.api_key_id
+       ${RECIPIENT_SUMMARY_JOIN}
+       WHERE m.organization_id = $1
+       ORDER BY COALESCE(m.scheduled_at, m.created_at) DESC`,
+      [req.user.organizationId]
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Серверийн алдаа' });
+    sendError(res, err);
   }
 }
 
 // Нэг мессежийн дэлгэрэнгүй + хүлээн авагч тус бүрийн sent/failed status
 async function getMessageById(req, res) {
   try {
-    const { id } = req.params;
+    const id = parseId(req.params.id);
+    if (!id) return res.status(404).json({ message: 'Мессеж олдсонгүй' });
 
     const message = await pool.query(
-      'SELECT * FROM messages WHERE id = $1 AND user_id = $2',
-      [id, req.user.id]
+      `SELECT m.*, u.name AS user_name, k.name AS api_key_name FROM messages m
+       LEFT JOIN users u ON u.id = m.user_id
+       LEFT JOIN api_keys k ON k.id = m.api_key_id
+       WHERE m.id = $1 AND m.organization_id = $2`,
+      [id, req.user.organizationId]
     );
     if (message.rows.length === 0) {
       return res.status(404).json({ message: 'Мессеж олдсонгүй' });
     }
 
     const recipients = await pool.query(
-      `SELECT mr.id, mr.phone, mr.status, mr.error, mr.sent_at, c.name AS contact_name
+      `SELECT mr.id, mr.phone, mr.status, mr.error, mr.sent_at, mr.segments, mr.content,
+              mr.recipient_type, mr.recipient_org_id,
+              COALESCE(mr.recipient_name, c.name) AS recipient_name
        FROM message_recipients mr
        LEFT JOIN contacts c ON c.id = mr.contact_id
-       WHERE mr.message_id = $1`,
+       WHERE mr.message_id = $1
+       ORDER BY mr.id`,
       [id]
     );
 
     res.json({ ...message.rows[0], recipients: recipients.rows });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Серверийн алдаа' });
+    sendError(res, err);
   }
 }
 
-module.exports = { sendMessage, getMessages, getMessageById };
+module.exports = { sendMessage, cancelScheduled, getMessages, getMessageById, sendError };

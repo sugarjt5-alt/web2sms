@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '../../lib/api';
+import AuthLayout, { LoginSwitch } from '../../components/AuthLayout';
+import { Alert } from '../../components/ui';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,35 +31,43 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container" style={{ maxWidth: 400 }}>
-      <div className="card">
-        <h1>Нэвтрэх</h1>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Имэйл</label>
-            <input
-              type="email" required
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Нууц үг</label>
-            <input
-              type="password" required
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
-          </div>
-          {error && <p className="error-text">{error}</p>}
-          <button className="primary" type="submit" disabled={loading} style={{ width: '100%' }}>
-            {loading ? 'Түр хүлээнэ үү...' : 'Нэвтрэх'}
-          </button>
-        </form>
-        <p style={{ marginTop: 14, fontSize: 13 }}>
-          Бүртгэлгүй юу? <a href="/register" style={{ color: '#2563eb' }}>Бүртгүүлэх</a>
-        </p>
-      </div>
-    </div>
+    <AuthLayout>
+      <LoginSwitch active="user" />
+      <h1>Тавтай морил</h1>
+      <p className="sub">Байгууллагын бүртгэлээрээ нэвтэрнэ үү</p>
+      {error && (
+        <Alert>
+          {error}
+          {error.startsWith('Admin бүртгэл') && (
+            <> — <a href="/admin/login" className="link">Admin нэвтрэх</a></>
+          )}
+        </Alert>
+      )}
+      <form onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="email">Имэйл</label>
+          <input
+            id="email" type="email" required autoComplete="email" placeholder="name@company.mn"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="password">Нууц үг</label>
+          <input
+            id="password" type="password" required autoComplete="current-password" placeholder="••••••••"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+        </div>
+        <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={loading}>
+          {loading ? 'Түр хүлээнэ үү...' : 'Нэвтрэх'}
+        </button>
+      </form>
+      <p className="auth-foot">
+        Бүртгэлгүй юу? <a href="/register" className="link">Хувь хүн</a> эсвэл{' '}
+        <a href="/register?type=organization" className="link">байгууллагаар</a> бүртгүүлэх
+      </p>
+    </AuthLayout>
   );
 }
