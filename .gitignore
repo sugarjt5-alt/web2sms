@@ -2,3 +2,5 @@
 node_modules
 
 bridge/
+
+docker-compose.override.yml
