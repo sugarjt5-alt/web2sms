@@ -14,13 +14,11 @@ function toLocalInput(date) {
 }
 
 const AUDIENCES = [
-  { value: 'all', label: 'Бүгд' },
-  { value: 'individuals', label: 'Хувь хэрэглэгчид' },
-  { value: 'organizations', label: 'Байгууллагууд' },
+  { value: 'all', label: 'Бүх хэрэглэгч' },
   { value: 'selected', label: 'Сонгох' },
 ];
 
-// Admin SMS илгээх: бүртгэлтэй хэрэглэгчид (хувь хүн, байгууллага) рүү. Кредит хасагдахгүй.
+// Admin SMS илгээх: бүртгэлтэй хэрэглэгчид рүү. Кредит хасагдахгүй.
 export default function AdminComposePage() {
   const router = useRouter();
   const textareaRef = useRef(null);
@@ -86,12 +84,10 @@ export default function AdminComposePage() {
     }
   }
 
-  const recipients = useMemo(() => {
-    if (audience === 'selected') return accounts.filter((a) => selected.includes(a.id));
-    if (audience === 'all') return accounts;
-    const type = audience === 'individuals' ? 'individual' : 'organization';
-    return accounts.filter((a) => a.type === type);
-  }, [audience, accounts, selected]);
+  const recipients = useMemo(
+    () => (audience === 'selected' ? accounts.filter((a) => selected.includes(a.id)) : accounts),
+    [audience, accounts, selected]
+  );
 
   // Нэг дугаар руу давхар явахгүй (backend ч давхардлыг хасна)
   const uniqueCount = useMemo(() => new Set(recipients.map((r) => r.phone)).size, [recipients]);
@@ -136,7 +132,7 @@ export default function AdminComposePage() {
   }
 
   return (
-    <AppShell area="admin" title="SMS илгээх" subtitle="Бүртгэлтэй хувь хэрэглэгчид, байгууллагууд руу">
+    <AppShell area="admin" title="SMS илгээх" subtitle="Бүртгэлтэй хэрэглэгчид рүү">
       <form onSubmit={handleSend} className="grid-main">
         <div>
           <div className="card">
@@ -179,9 +175,6 @@ export default function AdminComposePage() {
                     <label className="check-row" key={a.id}>
                       <input type="checkbox" checked={selected.includes(a.id)} onChange={() => toggle(a.id)} />
                       <span>{a.name}</span>
-                      <span className={`badge plain ${a.type === 'individual' ? 'scheduled' : 'owner'}`}>
-                        {a.type === 'individual' ? 'Хувь хүн' : 'Байгууллага'}
-                      </span>
                       <span className="sub">{a.phone}</span>
                     </label>
                   ))}
@@ -190,10 +183,9 @@ export default function AdminComposePage() {
               </>
             ) : (
               <div className="invoice">
-                <strong>{recipients.length}</strong> бүртгэлийн утас руу илгээнэ
-                {audience === 'all' && ' (хувь хэрэглэгчид + байгууллагууд)'}.
+                Бүх <strong>{recipients.length}</strong> хэрэглэгчийн утас руу илгээнэ.
                 <div className="muted small" style={{ marginTop: 4 }}>
-                  {'{нэр}'} нь хувь хүний нэр эсвэл байгууллагын нэрээр солигдоно.
+                  {'{нэр}'} нь хэрэглэгч бүрийн нэрээр солигдоно.
                 </div>
               </div>
             )}

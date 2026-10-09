@@ -15,7 +15,6 @@ export default function BillingPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const isOwner = me?.org_role === 'owner';
 
   async function load() {
     try {
@@ -101,10 +100,6 @@ export default function BillingPage() {
         </div>
       )}
 
-      {!isOwner && me && (
-        <Alert type="warning">Багц захиалахыг зөвхөн байгууллагын эзэн хийнэ.</Alert>
-      )}
-
       <div className="pkg-grid">
         {packages.map((p) => (
           <div key={p.id} className={`pkg-card ${p.id === featuredId ? 'featured' : ''}`}>
@@ -115,7 +110,7 @@ export default function BillingPage() {
             <div className="pkg-unit">1 SMS ≈ {formatMoney(Math.round((p.price / p.credits) * 10) / 10)}</div>
             {p.description && <div className="pkg-desc">{p.description}</div>}
             <button className={`btn ${p.id === featuredId ? 'btn-primary' : 'btn-secondary'} btn-block`}
-              onClick={() => handleOrder(p)} disabled={!isOwner || busy}>
+              onClick={() => handleOrder(p)} disabled={busy}>
               <Icon name="cart" size={16} /> Захиалах
             </button>
           </div>
@@ -153,9 +148,7 @@ export default function BillingPage() {
                       {o.status === 'pending' && (
                         <>
                           <button className="btn btn-secondary btn-sm" onClick={() => setInvoice(o)}>Төлөх заавар</button>{' '}
-                          {isOwner && (
-                            <button className="btn btn-danger btn-sm" onClick={() => handleCancel(o)}>Цуцлах</button>
-                          )}
+                          <button className="btn btn-danger btn-sm" onClick={() => handleCancel(o)}>Цуцлах</button>
                         </>
                       )}
                     </td>

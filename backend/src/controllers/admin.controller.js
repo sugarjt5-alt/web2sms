@@ -1,97 +1,16 @@
-const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { addCredits } = require('../services/credits');
-const { parseId, normalizeEmail, validateNewUser, parseOrgRole } = require('../services/validate');
+const { parseId } = require('../services/validate');
 
-// Шинэ хэрэглэгчийн өгөгдлийг шалгаж, имэйл давхцахгүй эсэхийг хянана. Алдаа бол мессеж буцаана.
-async function checkNewUser(client, { name, email, password }) {
-  const invalid = validateNewUser({ name, email, password });
-  if (invalid) return invalid;
-  const existing = await client.query('SELECT id FROM users WHERE LOWER(email) = $1', [email]);
-  return existing.rows.length > 0 ? 'Энэ имэйл бүртгэлтэй байна' : null;
-}
-
-// Шинэ байгууллага + эзэн хэрэглэгч үүсгэх (admin харилцагч байгууллагыг бүртгэх)
-async function createOrganization(req, res) {
-  const orgName = typeof req.body.name === 'string' ? req.body.name.trim() : '';
-  const owner = req.body.owner || {};
-  const email = normalizeEmail(owner.email);
-  const credits = Number(req.body.credits) || 0;
-
-  if (!orgName) return res.status(400).json({ message: 'Байгууллагын нэр шаардлагатай' });
-  if (!Number.isInteger(credits) || credits < 0 || credits > 10_000_000) {
-    return res.status(400).json({ message: 'Анхны кредит 0 эсвэл эерэг бүхэл тоо байна' });
-  }
-
-  const client = await pool.connect();
-  try {
-    const invalid = await checkNewUser(client, { name: owner.name, email, password: owner.password });
-    if (invalid) return res.status(400).json({ message: invalid });
-
-    await client.query('BEGIN');
-    const org = await client.query(
-      'INSERT INTO organizations (name) VALUES ($1) RETURNING id, name',
-      [orgName.slice(0, 150)]
-    );
-    const orgId = org.rows[0].id;
-    await client.query(
-      `INSERT INTO users (name, email, password_hash, role, organization_id, org_role, created_via)
-       VALUES ($1, $2, $3, 'user', $4, 'owner', 'admin')`,
-      [String(owner.name).trim(), email, await bcrypt.hash(owner.password, 10), orgId]
-    );
-    if (credits > 0) {
-      await addCredits(client, {
-        organizationId: orgId, amount: credits, type: 'topup', userId: req.user.id, note: 'Анхны кредит',
-      });
-    }
-    await client.query('COMMIT');
-    res.status(201).json({ id: orgId, name: org.rows[0].name, credits });
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    console.error(err);
-    res.status(500).json({ message: 'Серверийн алдаа' });
-  } finally {
-    client.release();
-  }
-}
-
-// Байгаа байгууллагад хэрэглэгч нэмэх (эзэн эсвэл ажилтан)
-async function addOrganizationMember(req, res) {
-  try {
-    const orgId = parseId(req.params.id);
-    const { name, password } = req.body;
-    const email = normalizeEmail(req.body.email);
-    const orgRole = parseOrgRole(req.body.org_role, 'client');
-    if (!orgId) return res.status(404).json({ message: 'Байгууллага олдсонгүй' });
-
-    const org = await pool.query('SELECT id, type FROM organizations WHERE id = $1', [orgId]);
-    if (org.rows.length === 0) return res.status(404).json({ message: 'Байгууллага олдсонгүй' });
-    if (org.rows[0].type === 'individual') {
-      return res.status(400).json({ message: 'Хувь хүний бүртгэлд хэрэглэгч нэмэх боломжгүй' });
-    }
-
-    const invalid = await checkNewUser(pool, { name, email, password });
-    if (invalid) return res.status(400).json({ message: invalid });
-
-    const result = await pool.query(
-      `INSERT INTO users (name, email, password_hash, role, organization_id, org_role, created_via)
-       VALUES ($1, $2, $3, 'user', $4, $5, 'admin')
-       RETURNING id, name, email, org_role`,
-      [String(name).trim(), email, await bcrypt.hash(password, 10), orgId, orgRole]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Серверийн алдаа' });
-  }
-}
-
-// Зөвхөн admin эрхтэй хэрэглэгч дуудна: бүх хэрэглэгчийн жагсаалт
+// Зөвхөн admin эрхтэй хэрэглэгч дуудна: бүх хэрэглэгчийн жагсаалт.
+// Кредит, утас, төлөв нь хэрэглэгчийн бүртгэл (organizations мөр)-д хадгалагддаг.
 async function getAllUsers(req, res) {
   try {
     const result = await pool.query(
       `SELECT u.id, u.name, u.email, u.role, u.org_role, u.created_at, u.created_via,
               o.id AS organization_id, o.name AS organization_name, o.type AS organization_type,
+              o.credits, o.is_active, o.phone,
+              (SELECT COUNT(*) FROM message_recipients mr WHERE mr.recipient_org_id = o.id)::int AS received_count,
               (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id)::int AS message_count
        FROM users u
        JOIN organizations o ON o.id = u.organization_id
@@ -286,8 +205,7 @@ async function getStats(req, res) {
   try {
     const result = await pool.query(
       `SELECT
-         (SELECT COUNT(*) FROM organizations WHERE type = 'organization')::int AS organizations,
-         (SELECT COUNT(*) FROM organizations WHERE type = 'individual')::int AS individuals,
+         (SELECT COUNT(*) FROM users WHERE role <> 'admin')::int AS customers,
          (SELECT COUNT(*) FROM users)::int AS users,
          (SELECT COUNT(*) FROM users WHERE role = 'admin')::int AS admins,
          (SELECT COUNT(*) FROM messages)::int AS messages,
@@ -308,6 +226,6 @@ async function getStats(req, res) {
 
 module.exports = {
   getAllUsers, updateUserRole, deleteUser,
-  getOrganizations, createOrganization, addOrganizationMember, adjustCredits, setOrganizationActive,
+  getOrganizations, adjustCredits, setOrganizationActive,
   getRecipients, getStats,
 };

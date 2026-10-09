@@ -25,7 +25,7 @@ export function DeliveryBar({ sent = 0, failed = 0, total = 0 }) {
   );
 }
 
-// Илгээлтийн хүлээн авагчдын нэрс (байгууллага эсвэл харилцагч): эхний 3 нэр + "+N бусад"
+// Илгээлтийн хүлээн авагчдын нэрс: эхний 3 нэр + "+N бусад"
 export function RecipientNames({ names, count }) {
   if (!count) return <span className="muted">—</span>;
   const shown = (names || []).filter(Boolean);
@@ -83,9 +83,6 @@ export function OrderBadge({ status }) {
   return <span className={`badge ${cls}`}>{label}</span>;
 }
 
-// Байгууллага доторх эрх
-export const ORG_ROLE_LABELS = { owner: 'Эзэн', member: 'Ажилтан', client: 'Харилцагч' };
-export const orgRoleLabel = (role) => ORG_ROLE_LABELS[role] || role;
 
 export function formatMoney(value) {
   return `${Number(value || 0).toLocaleString('mn-MN')}₮`;

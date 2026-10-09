@@ -62,8 +62,6 @@ export default function HistoryDetailPage({ params }) {
   }
 
   const pending = message.total - message.sent_count - message.failed_count;
-  const orgCount = message.recipients.filter((r) => r.recipient_type === 'organization').length;
-  const clientCount = message.recipients.length - orgCount;
   const sender = message.source === 'api' ? `API · ${message.api_key_name || 'түлхүүр'}` : message.user_name;
   const totalSms = message.recipients.reduce((s, r) => s + (r.segments || 1), 0);
 
@@ -93,8 +91,7 @@ export default function HistoryDetailPage({ params }) {
       )}
 
       <div className="stats">
-        <StatCard icon="contacts" color="indigo" value={message.total}
-          label={[orgCount && `${orgCount} байгууллага`, clientCount && `${clientCount} харилцагч`].filter(Boolean).join(' · ') || 'Хүлээн авагч'} />
+        <StatCard icon="contacts" color="indigo" value={message.total} label="Хүлээн авагч" />
         <StatCard icon="check" color="green" value={message.sent_count} label="Амжилттай" />
         <StatCard icon="x" color="red" value={message.failed_count} label="Амжилтгүй" />
         <StatCard icon="message" color="amber" value={totalSms} label="Нийт SMS" />
@@ -124,19 +121,14 @@ export default function HistoryDetailPage({ params }) {
           <table>
             <thead>
               <tr>
-                <th><Icon name="building" size={13} /> Байгууллага</th>
-                <th><Icon name="user" size={13} /> Харилцагч</th>
+                <th>Хүлээн авагч</th>
                 <th>Утас</th><th>Илгээсэн текст</th><th>Төлөв</th><th>Илгээсэн</th>
               </tr>
             </thead>
             <tbody>
               {message.recipients.map((r) => (
                 <tr key={r.id}>
-                  {/* Байгууллага руу илгээсэн бол нэр нь Байгууллага баганад, бусад нь Харилцагч баганад */}
-                  <td className="cell-strong">{r.recipient_type === 'organization' ? r.recipient_name : <span className="muted">—</span>}</td>
-                  <td className="cell-strong">
-                    {r.recipient_type !== 'organization' && r.recipient_name ? r.recipient_name : <span className="muted">—</span>}
-                  </td>
+                  <td className="cell-strong">{r.recipient_name || <span className="muted">—</span>}</td>
                   <td className="mono">{r.phone}</td>
                   <td>
                     <div className="truncate small" title={r.content}>{r.content || message.content}</div>

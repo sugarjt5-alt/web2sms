@@ -14,10 +14,10 @@ function sendError(res, err) {
 }
 
 // Bulk SMS илгээх (зөвхөн системийн admin) — бүртгэлтэй хэрэглэгчдийн утас руу:
-//   audience: 'individuals' | 'organizations' | 'all', эсвэл
-//   organizationIds — сонгосон хувь хэрэглэгч/байгууллагууд.
+//   audience: 'all' — бүх хэрэглэгч, эсвэл
+//   organizationIds — сонгосон хэрэглэгчдийн бүртгэлүүд (organizations.id).
 // Утасгүй, хаагдсан бүртгэл орохгүй. scheduledAt өгвөл тухайн цагт илгээнэ.
-// Мессеж дэх {нэр} нь хувь хүний / байгууллагын нэрээр солигдоно. Admin-аас кредит хасагдахгүй.
+// Мессеж дэх {нэр} нь хэрэглэгчийн нэрээр солигдоно. Admin-аас кредит хасагдахгүй.
 async function sendMessage(req, res) {
   const orgId = req.user.organizationId;
   const { content, audience, organizationIds } = req.body;
@@ -71,8 +71,7 @@ async function cancelScheduled(req, res) {
   }
 }
 
-// SMS түүх харах. Илгээлт бүрт хүлээн авагчдыг төрлөөр нь (байгууллага / харилцагч)
-// тоолж, эхний 3 нэрийг буцаана.
+// SMS түүх харах. Илгээлт бүрт хүлээн авагчдын тоо, эхний нэрсийг буцаана.
 async function getMessages(req, res) {
   try {
     const result = await pool.query(
@@ -91,7 +90,6 @@ async function getMessages(req, res) {
   }
 }
 
-// Нэг мессежийн дэлгэрэнгүй + хүлээн авагч тус бүрийн sent/failed status
 // Нэг мессежийн дэлгэрэнгүй + хүлээн авагч тус бүрийн sent/failed status
 async function getMessageById(req, res) {
   try {

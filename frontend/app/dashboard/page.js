@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import AppShell from '../../components/AppShell';
 import Icon from '../../components/Icon';
-import { OrderBadge, formatDate, formatMoney, orgRoleLabel } from '../../components/ui';
+import { OrderBadge, formatDate, formatMoney } from '../../components/ui';
 import { apiFetch } from '../../lib/api';
 
 // Хэрэглэгчийн хянах самбар: кредит, бүртгэлийн мэдээлэл, сүүлийн захиалгууд.
@@ -17,16 +17,10 @@ export default function DashboardPage() {
       .catch(console.error);
   }, []);
 
-  const isIndividual = user?.organization_type === 'individual';
   const pending = orders.filter((o) => o.status === 'pending');
 
   return (
-    <AppShell
-      title={`Сайн байна уу, ${user?.name || ''}`}
-      subtitle={!user ? '' : isIndividual
-        ? 'Хувь хэрэглэгч'
-        : `${user.organization_name} · ${orgRoleLabel(user.org_role)}`}
-    >
+    <AppShell title={`Сайн байна уу, ${user?.name || ''}`}>
       <div className="hero">
         <div>
           <div className="label">SMS кредитийн үлдэгдэл</div>
@@ -52,13 +46,9 @@ export default function DashboardPage() {
           <div className="summary">
             <div className="summary-row"><span>Нэр</span><strong>{user?.name}</strong></div>
             <div className="summary-row"><span>Имэйл</span><strong>{user?.email}</strong></div>
-            <div className="summary-row"><span>Төрөл</span><strong>{isIndividual ? 'Хувь хүн' : 'Байгууллага'}</strong></div>
-            {!isIndividual && (
-              <div className="summary-row"><span>Байгууллага</span><strong>{user?.organization_name}</strong></div>
-            )}
           </div>
           <a href="/team" className="btn btn-secondary btn-sm" style={{ marginTop: 16 }}>
-            {isIndividual ? 'Миний бүртгэл' : 'Байгууллага, ажилтнууд'} <Icon name="arrowRight" size={14} />
+            Миний бүртгэл <Icon name="arrowRight" size={14} />
           </a>
         </div>
 

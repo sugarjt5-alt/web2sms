@@ -2,14 +2,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShell from '../../../components/AppShell';
 import Icon from '../../../components/Icon';
-import { Alert, EmptyState, formatDate, orgRoleLabel } from '../../../components/ui';
+import { Alert, EmptyState, formatDate } from '../../../components/ui';
 import { apiFetch, apiUpload } from '../../../lib/api';
 
 const SOURCE_LABELS = {
   register: 'Өөрөө бүртгүүлсэн',
   admin: 'Admin нэмсэн',
   import: 'CSV импорт',
-  team: 'Ажилтнаар нэмэгдсэн',
+  team: 'Admin нэмсэн',
 };
 const NEW_MS = 24 * 60 * 60 * 1000;
 const REFRESH_MS = 20 * 1000;
@@ -26,14 +26,12 @@ function downloadCsv(filename, rows) {
   URL.revokeObjectURL(url);
 }
 
-// Хэрэглэгчид = ХУВЬ ХҮНЭЭР бүртгүүлсэн хүмүүс (+ системийн admin-ууд).
-// Байгууллагын ажилтнууд "Байгууллагууд" хуудсанд байгууллага дотроо харагдана.
+// Бүх хэрэглэгч (бүртгүүлсэн, нэвтэрдэг хүн бүр) + системийн admin-ууд
 export default function AdminUsersPage() {
   const [me, setMe] = useState(null);
   const [users, setUsers] = useState([]);
-  const [orgs, setOrgs] = useState([]);
   const [search, setSearch] = useState('');
-  const [topUp, setTopUp] = useState({}); // { [orgId]: '100' }
+  const [topUp, setTopUp] = useState({}); // { [accountId]: '100' }
   const [showImport, setShowImport] = useState(false);
   const [file, setFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -43,9 +41,7 @@ export default function AdminUsersPage() {
 
   const load = useCallback(async () => {
     try {
-      const [u, o] = await Promise.all([apiFetch('/admin/users'), apiFetch('/admin/organizations')]);
-      setUsers(u);
-      setOrgs(o);
+      setUsers(await apiFetch('/admin/users'));
     } catch (err) {
       setError(err.message);
     }
@@ -59,20 +55,16 @@ export default function AdminUsersPage() {
     return () => clearInterval(timer);
   }, [load]);
 
-  const orgById = useMemo(() => new Map(orgs.map((o) => [o.id, o])), [orgs]);
   const admins = users.filter((u) => u.role === 'admin');
-
-  // Хувь хүн: өөрийн "individual" бүртгэлтэй (кредит, төлөв нь тэр бүртгэлд)
-  const individuals = useMemo(() => {
+  const customers = useMemo(() => {
     const q = search.trim().toLowerCase();
     return users
-      .filter((u) => u.role !== 'admin' && u.organization_type === 'individual')
-      .map((u) => ({ ...u, account: orgById.get(u.organization_id) }))
-      .filter((u) => !q || u.name.toLowerCase().includes(q) || u.email.includes(q) || (u.account?.phone || '').includes(q));
-  }, [users, orgById, search]);
+      .filter((u) => u.role !== 'admin')
+      .filter((u) => !q || u.name.toLowerCase().includes(q) || u.email.includes(q) || (u.phone || '').includes(q));
+  }, [users, search]);
 
   const isNew = (u) => Date.now() - new Date(u.created_at).getTime() < NEW_MS;
-  const newCount = individuals.filter(isNew).length;
+  const newCount = customers.filter(isNew).length;
 
   function flash(ok, msg) {
     setError(ok ? '' : msg);
@@ -95,11 +87,10 @@ export default function AdminUsersPage() {
   }
 
   async function handleToggleActive(u) {
-    const active = u.account?.is_active;
-    if (!confirm(`${u.name}-ийн бүртгэлийг ${active ? 'түр хаах' : 'дахин нээх'} уу?`)) return;
+    if (!confirm(`${u.name}-ийн бүртгэлийг ${u.is_active ? 'түр хаах' : 'дахин нээх'} уу?`)) return;
     try {
       await apiFetch(`/admin/organizations/${u.organization_id}/active`, {
-        method: 'PUT', body: JSON.stringify({ is_active: !active }),
+        method: 'PUT', body: JSON.stringify({ is_active: !u.is_active }),
       });
       load();
     } catch (err) {
@@ -109,12 +100,12 @@ export default function AdminUsersPage() {
 
   async function handleRoleChange(u, role) {
     const warn = role === 'admin'
-      ? `${u.name}-д системийн ADMIN эрх өгөх үү? Тэр бүх байгууллагыг удирдах боломжтой болж, хэрэглэгчийн хэсэгт нэвтэрч чадахгүй болно.`
+      ? `${u.name}-д системийн ADMIN эрх өгөх үү? Тэр хэрэглэгчийн хэсэгт нэвтэрч чадахгүй болно.`
       : `${u.name}-ийн admin эрхийг хасах уу?`;
     if (!confirm(warn)) return;
     try {
       await apiFetch(`/admin/users/${u.id}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
-      flash(true, `${u.name}: эрх "${role}" боллоо`);
+      flash(true, `${u.name}: эрх "${role === 'admin' ? 'Admin' : 'Хэрэглэгч'}" боллоо`);
       load();
     } catch (err) {
       flash(false, err.message);
@@ -122,7 +113,7 @@ export default function AdminUsersPage() {
   }
 
   async function handleDelete(u) {
-    if (!confirm(`${u.name}-ийг устгах уу? Түүний харилцагч, түүх, кредит бүгд устна.`)) return;
+    if (!confirm(`${u.name}-ийг устгах уу? Түүний кредит, түүх устна.`)) return;
     try {
       const res = await apiFetch(`/admin/users/${u.id}`, { method: 'DELETE' });
       flash(true, res.message);
@@ -156,11 +147,8 @@ export default function AdminUsersPage() {
   function downloadCredentials() {
     const created = importResult.results.filter((r) => r.status === 'created');
     downloadCsv('нэвтрэх-мэдээлэл.csv', [
-      ['төрөл', 'байгууллага', 'нэр', 'имэйл', 'нууц үг'],
-      ...created.map((r) => [
-        r.individual ? 'хувь хүн' : orgRoleLabel(r.org_role).toLowerCase(),
-        r.organization, r.name, r.email, r.password || '(файлд өгсөн нууц үг)',
-      ]),
+      ['нэр', 'имэйл', 'нууц үг', 'утас'],
+      ...created.map((r) => [r.name, r.email, r.password || '(файлд өгсөн нууц үг)', r.phone || '']),
     ]);
   }
 
@@ -170,7 +158,7 @@ export default function AdminUsersPage() {
   return (
     <AppShell
       area="admin" title="Хэрэглэгчид"
-      subtitle={`Хувь хүнээр бүртгүүлсэн ${individuals.length}${newCount ? ` · сүүлийн 24 цагт ${newCount} шинэ` : ''}`}
+      subtitle={`Нийт ${users.filter((u) => u.role !== 'admin').length} хэрэглэгч${newCount ? ` · сүүлийн 24 цагт ${newCount} шинэ` : ''}`}
       actions={!showImport && (
         <button className="btn btn-primary" onClick={() => setShowImport(true)}>
           <Icon name="upload" size={16} /> CSV-ээс оруулах
@@ -185,14 +173,13 @@ export default function AdminUsersPage() {
           <div className="card-header">
             <div>
               <h2>CSV файлаас хэрэглэгч оруулах</h2>
-              <p>"байгууллага" хоосон бол хувь хүн болно, нэр бичсэн бол тэр байгууллагад нэмэгдэнэ. 300 мөр хүртэл.</p>
+              <p>Мөр бүр нэг хэрэглэгч болно. Нэг файлд 300 хүртэл мөр.</p>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => downloadCsv('хэрэглэгч-загвар.csv', [
-                ['байгууллага', 'нэр', 'имэйл', 'нууц үг', 'эрх', 'утас'],
-                ['', 'Бат', 'bat@gmail.com', '', '', '99112233'],
-                ['Номин ХХК', 'Болд', 'bold@nomin.mn', '', '', '88112233'],
-                ['Номин ХХК', 'Сараа', 'saraa@nomin.mn', '', 'харилцагч', ''],
+                ['нэр', 'имэйл', 'нууц үг', 'утас'],
+                ['Бат', 'bat@gmail.com', '', '99112233'],
+                ['Сараа', 'saraa@gmail.com', 'MyPass2026', '88112233'],
               ])}>
                 <Icon name="download" size={14} /> Жишээ файл
               </button>
@@ -215,12 +202,10 @@ export default function AdminUsersPage() {
             <div className="small muted">
               <div className="label">Баганууд (дарааллаараа)</div>
               <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
-                <li><strong>байгууллага</strong>: <em>хоосон = хувь хүн</em>; байгаа байгууллагад нэмнэ, байхгүй бол үүсгэнэ</li>
                 <li><strong>нэр</strong></li>
                 <li><strong>имэйл</strong>: нэвтрэх нэр</li>
                 <li><strong>нууц үг</strong>: хоосон бол систем үүсгэнэ</li>
-                <li><strong>эрх</strong>: хоосон бол <strong>харилцагч</strong>; эсвэл эзэн / ажилтан (байгууллагад л хамаатай)</li>
-                <li><strong>утас</strong>: заавал биш</li>
+                <li><strong>утас</strong>: SMS хүлээн авах дугаар</li>
               </ol>
             </div>
           </div>
@@ -229,8 +214,6 @@ export default function AdminUsersPage() {
             <div style={{ marginTop: 18 }}>
               <Alert type={importResult.created > 0 ? 'success' : 'warning'}>
                 <strong>{importResult.created}</strong> хэрэглэгч нэмэгдлээ
-                {importResult.new_individuals > 0 && ` (${importResult.new_individuals} хувь хүн)`}
-                {importResult.new_organizations > 0 && `, ${importResult.new_organizations} шинэ байгууллага үүслээ`}
                 {importResult.skipped > 0 && `, ${importResult.skipped} мөр алгасагдлаа`}.
               </Alert>
               {importResult.created > 0 && (
@@ -269,25 +252,25 @@ export default function AdminUsersPage() {
       <div className="card">
         <div className="card-header">
           <div>
-            <h2>Хувь хэрэглэгчид</h2>
-            <p>20 секунд тутам автоматаар шинэчлэгдэнэ. Байгууллагын ажилтнуудыг <a href="/admin/organizations" className="link">Байгууллагууд</a>-аас харна.</p>
+            <h2>Жагсаалт</h2>
+            <p>20 секунд тутам автоматаар шинэчлэгдэнэ</p>
           </div>
           <div className="search" style={{ width: 260, maxWidth: '100%' }}>
             <Icon name="search" size={16} />
             <input placeholder="Нэр, имэйл, утсаар хайх" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
-        {individuals.length === 0 ? (
-          <EmptyState icon="user" title={search ? 'Хайлтад тохирох хэрэглэгч алга' : 'Хувь хэрэглэгч алга байна'} />
+        {customers.length === 0 ? (
+          <EmptyState icon="user" title={search ? 'Хайлтад тохирох хэрэглэгч алга' : 'Хэрэглэгч алга байна'} />
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Хэрэглэгч</th><th>Утас</th><th>Илгээсэн</th><th>Кредит</th><th>Цэнэглэх</th><th>Төлөв</th><th>Бүртгэл</th><th></th></tr>
+                <tr><th>Хэрэглэгч</th><th>Утас</th><th>Хүлээн авсан SMS</th><th>Кредит</th><th>Цэнэглэх</th><th>Төлөв</th><th>Бүртгэл</th><th></th></tr>
               </thead>
               <tbody>
-                {individuals.map((u) => (
-                  <tr key={u.id} style={isNew(u) ? { background: '#fffbeb' } : { opacity: u.account?.is_active === false ? 0.6 : 1 }}>
+                {customers.map((u) => (
+                  <tr key={u.id} style={isNew(u) ? { background: '#fffbeb' } : { opacity: u.is_active === false ? 0.6 : 1 }}>
                     <td>
                       <div className="cell-strong">
                         {u.name}
@@ -295,9 +278,9 @@ export default function AdminUsersPage() {
                       </div>
                       <div className="muted small">{u.email}</div>
                     </td>
-                    <td className="mono small">{u.account?.phone || '—'}</td>
-                    <td className="mono">{u.account?.sent_count ?? 0}</td>
-                    <td className="mono" style={{ fontWeight: 700 }}>{u.account?.credits ?? 0}</td>
+                    <td className="mono small">{u.phone || '—'}</td>
+                    <td className="mono">{u.received_count}</td>
+                    <td className="mono" style={{ fontWeight: 700 }}>{u.credits ?? 0}</td>
                     <td>
                       <form onSubmit={(e) => handleTopUp(e, u)} style={{ display: 'flex', gap: 6 }}>
                         <input className="input-sm" type="number" step="1" required placeholder="+100"
@@ -308,10 +291,10 @@ export default function AdminUsersPage() {
                       </form>
                     </td>
                     <td>
-                      <button className={`badge ${u.account?.is_active ? 'active' : 'inactive'}`}
+                      <button className={`badge ${u.is_active ? 'active' : 'inactive'}`}
                         style={{ border: 'none', cursor: 'pointer' }} onClick={() => handleToggleActive(u)}
-                        title={u.account?.is_active ? 'Дарж түр хаана' : 'Дарж нээнэ'}>
-                        {u.account?.is_active ? 'Идэвхтэй' : 'Хаагдсан'}
+                        title={u.is_active ? 'Дарж түр хаана' : 'Дарж нээнэ'}>
+                        {u.is_active ? 'Идэвхтэй' : 'Хаагдсан'}
                       </button>
                     </td>
                     <td className="small">
@@ -319,6 +302,11 @@ export default function AdminUsersPage() {
                       <div className="muted">{SOURCE_LABELS[u.created_via] || u.created_via}</div>
                     </td>
                     <td className="actions">
+                      <select className="input-sm" value={u.role} style={{ width: 'auto', marginRight: 6 }}
+                        onChange={(e) => handleRoleChange(u, e.target.value)} title="Системийн эрх">
+                        <option value="user">Хэрэглэгч</option>
+                        <option value="admin">Admin</option>
+                      </select>
                       <button className="btn btn-danger btn-sm" onClick={() => handleDelete(u)} title="Устгах">
                         <Icon name="trash" size={15} />
                       </button>
@@ -332,12 +320,7 @@ export default function AdminUsersPage() {
       </div>
 
       <div className="card">
-        <div className="card-header">
-          <div>
-            <h2>Системийн admin-ууд ({admins.length})</h2>
-            <p>Байгууллагын ажилтанд admin эрх өгөхдөө Байгууллагууд хэсгээс ажилтан дээр нь сонгоно</p>
-          </div>
-        </div>
+        <div className="card-header"><h2>Системийн admin-ууд ({admins.length})</h2></div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>Admin</th><th>Нэмэгдсэн</th><th>Эрх</th><th></th></tr></thead>

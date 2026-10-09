@@ -28,8 +28,7 @@ export default function HistoryPage() {
               <thead>
                 <tr>
                   <th>Огноо</th><th>Мессеж</th>
-                  <th><Icon name="building" size={13} /> Байгууллага</th>
-                  <th><Icon name="user" size={13} /> Харилцагч</th>
+                  <th>Хүлээн авагч</th>
                   <th>Хүргэлт</th><th>Төлөв</th>
                 </tr>
               </thead>
@@ -46,8 +45,11 @@ export default function HistoryPage() {
                     <td>
                       <a href={`/admin/history/${m.id}`} className="truncate cell-strong" style={{ display: 'block' }}>{m.content}</a>
                     </td>
-                    <td><RecipientNames names={m.org_names} count={m.org_count} /></td>
-                    <td><RecipientNames names={m.client_names} count={m.client_count} /></td>
+                    <td>
+                      <RecipientNames
+                        names={[...(m.org_names || []), ...(m.client_names || [])].slice(0, 3)}
+                        count={(m.org_count || 0) + (m.client_count || 0)} />
+                    </td>
                     <td style={{ minWidth: 130 }}>
                       <DeliveryBar sent={m.sent_count} failed={m.failed_count} total={m.total} />
                       <div className="muted small mono" style={{ marginTop: 4 }}>

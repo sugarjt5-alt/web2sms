@@ -34,12 +34,12 @@ export default function AdminOrdersPage() {
   useEffect(() => { load(filter); }, [filter]);
 
   async function handleApprove(o) {
-    if (!confirm(`${o.invoice_no}: ${formatMoney(o.price)} төлбөр дансанд орсон уу?\n"${o.organization_name}"-д ${o.credits.toLocaleString('mn-MN')} кредит нэмэгдэнэ.`)) return;
+    if (!confirm(`${o.invoice_no}: ${formatMoney(o.price)} төлбөр дансанд орсон уу?\n${o.organization_name}-д ${o.credits.toLocaleString('mn-MN')} кредит нэмэгдэнэ.`)) return;
     setError('');
     setSuccess('');
     try {
       const res = await apiFetch(`/admin/orders/${o.id}/approve`, { method: 'POST', body: '{}' });
-      setSuccess(`${o.invoice_no} батлагдлаа. "${o.organization_name}"-ийн шинэ үлдэгдэл: ${res.credits_balance.toLocaleString('mn-MN')}`);
+      setSuccess(`${o.invoice_no} батлагдлаа. ${o.organization_name}-ийн шинэ үлдэгдэл: ${res.credits_balance.toLocaleString('mn-MN')}`);
       load();
     } catch (err) {
       setError(err.message);
@@ -101,7 +101,7 @@ export default function AdminOrdersPage() {
           <div className="table-wrap" style={{ margin: -22 }}>
             <table>
               <thead>
-                <tr><th>Нэхэмжлэх</th><th>Байгууллага</th><th>Багц</th><th>Дүн</th><th>Төлөв</th><th></th></tr>
+                <tr><th>Нэхэмжлэх</th><th>Хэрэглэгч</th><th>Багц</th><th>Дүн</th><th>Төлөв</th><th></th></tr>
               </thead>
               <tbody>
                 {orders.map((o) => (

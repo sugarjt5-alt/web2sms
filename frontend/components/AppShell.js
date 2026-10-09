@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Icon from './Icon';
 import { apiFetch } from '../lib/api';
 
-// Хэрэглэгчийн (хувь хүн / байгууллага) цэс. SMS илгээх хэсгүүд зөвхөн admin-д.
+// Хэрэглэгчийн цэс. SMS илгээх хэсгүүд зөвхөн admin-д.
 const USER_NAV = [
   { items: [{ href: '/dashboard', label: 'Хянах самбар', icon: 'dashboard' }] },
   {
@@ -16,7 +16,7 @@ const USER_NAV = [
   },
   {
     section: 'Тохиргоо',
-    items: [{ href: '/team', label: 'Байгууллага, ажилтнууд', icon: 'building' }],
+    items: [{ href: '/team', label: 'Миний бүртгэл', icon: 'user' }],
   },
 ];
 
@@ -33,10 +33,7 @@ const ADMIN_NAV = [
   },
   {
     section: 'Хэрэглэгч',
-    items: [
-      { href: '/admin/organizations', label: 'Байгууллагууд', icon: 'building' },
-      { href: '/admin/users', label: 'Хэрэглэгчид', icon: 'contacts', badge: 'new_users' },
-    ],
+    items: [{ href: '/admin/users', label: 'Хэрэглэгчид', icon: 'contacts', badge: 'new_users' }],
   },
   {
     section: 'Төлбөр',
@@ -56,7 +53,7 @@ function initials(name = '') {
 }
 
 // Нэвтэрсэн хуудсуудын үндсэн хүрээ: зүүн цэс + гарчиг + агуулга.
-// area="user" (анхдагч) — байгууллагын хэрэглэгч; area="admin" — системийн admin.
+// area="user" (анхдагч) — хэрэглэгч; area="admin" — системийн admin.
 // Буруу хэсэгт орсон хэрэглэгчийг өөрийнх нь хэсэг рүү шилжүүлнэ.
 export default function AppShell({ area = 'user', title, subtitle, actions, children }) {
   const router = useRouter();
@@ -102,16 +99,7 @@ export default function AppShell({ area = 'user', title, subtitle, actions, chil
   // Эрх шалгагдаж дуустал (эсвэл өөр хэсэг рүү шилжиж байхад) агуулгыг харуулахгүй
   if (!user) return null;
 
-  const isIndividual = user.organization_type === 'individual';
-  const nav = (isAdminArea ? ADMIN_NAV : USER_NAV)
-    .map((group) => ({
-      ...group,
-      items: group.items
-        .filter((item) => !item.ownerOnly || user.org_role === 'owner')
-        // Хувь хүнд ажилтан байхгүй тул "Миний бүртгэл" гэж нэрлэнэ
-        .map((item) => (item.href === '/team' && isIndividual ? { ...item, label: 'Миний бүртгэл', icon: 'user' } : item)),
-    }))
-    .filter((group) => group.items.length > 0);
+  const nav = isAdminArea ? ADMIN_NAV : USER_NAV;
   const isActive = (item) =>
     item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
   const lowCredits = typeof user.credits === 'number' && user.credits < 50;
@@ -161,7 +149,7 @@ export default function AppShell({ area = 'user', title, subtitle, actions, chil
             <div className="user-meta">
               <div className="name">{user.name}</div>
               <div className="org">
-                {isAdminArea ? user.email : isIndividual ? 'Хувь хэрэглэгч' : user.organization_name}
+                {isAdminArea ? user.email : 'Хэрэглэгч'}
               </div>
             </div>
             <button className="icon-btn" onClick={handleLogout} title="Гарах" aria-label="Гарах">
