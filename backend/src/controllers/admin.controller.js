@@ -1,22 +1,47 @@
 const pool = require('../config/db');
 const { addCredits } = require('../services/credits');
 const { parseId } = require('../services/validate');
+const { normalizePhone } = require('../services/csv.util');
 
 // Зөвхөн admin эрхтэй хэрэглэгч дуудна: бүх хэрэглэгчийн жагсаалт.
-// Кредит, утас, төлөв нь хэрэглэгчийн бүртгэл (organizations мөр)-д хадгалагддаг.
+// Утас нь хэрэглэгч бүр дээр; кредит, төлөв нь хэрэглэгчийн бүртгэл (organizations мөр)-д.
 async function getAllUsers(req, res) {
   try {
     const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.role, u.org_role, u.created_at, u.created_via,
+      `SELECT u.id, u.name, u.email, u.role, u.org_role, u.created_at, u.created_via, u.phone,
               o.id AS organization_id, o.name AS organization_name, o.type AS organization_type,
-              o.credits, o.is_active, o.phone,
-              (SELECT COUNT(*) FROM message_recipients mr WHERE mr.recipient_org_id = o.id)::int AS received_count,
+              o.credits, o.is_active,
+              (SELECT COUNT(*) FROM message_recipients mr
+               WHERE mr.recipient_user_id = u.id
+                  OR (mr.recipient_user_id IS NULL AND mr.recipient_org_id = o.id AND o.type = 'individual')
+              )::int AS received_count,
               (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id)::int AS message_count
        FROM users u
        JOIN organizations o ON o.id = u.organization_id
        ORDER BY u.created_at DESC`
     );
     res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+}
+
+// Хэрэглэгчийн утасны дугаар тохируулах (хоосон бол устгана)
+async function updateUserPhone(req, res) {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(404).json({ message: 'Хэрэглэгч олдсонгүй' });
+    const raw = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
+    const phone = raw ? normalizePhone(raw) : null;
+    if (raw && !phone) return res.status(400).json({ message: 'Утасны дугаар буруу байна (жишээ: 99112233)' });
+
+    const result = await pool.query(
+      'UPDATE users SET phone = $1 WHERE id = $2 RETURNING id, name, phone',
+      [phone, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Хэрэглэгч олдсонгүй' });
+    res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Серверийн алдаа' });
@@ -183,15 +208,15 @@ async function setOrganizationActive(req, res) {
 // SMS илгээх боломжтой бүртгэлтэй хэрэглэгчид (утастай, идэвхтэй) — admin-ий илгээх хуудсанд
 async function getRecipients(req, res) {
   try {
+    // Хэрэглэгч бүр тусдаа хүлээн авагч (admin-ууд, хаагдсан бүртгэл орохгүй)
     const result = await pool.query(
-      `SELECT id, name, type, phone FROM organizations
-       WHERE phone IS NOT NULL AND is_active AND id <> $1
-       ORDER BY type, name`,
-      [req.user.organizationId]
+      `SELECT u.id, u.name, u.phone FROM users u JOIN organizations o ON o.id = u.organization_id
+       WHERE u.role <> 'admin' AND u.phone IS NOT NULL AND o.is_active
+       ORDER BY u.name, u.id`
     );
     const noPhone = await pool.query(
-      `SELECT COUNT(*)::int AS n FROM organizations WHERE phone IS NULL AND id <> $1`,
-      [req.user.organizationId]
+      `SELECT COUNT(*)::int AS n FROM users u JOIN organizations o ON o.id = u.organization_id
+       WHERE u.role <> 'admin' AND u.phone IS NULL AND o.is_active`
     );
     res.json({ accounts: result.rows, without_phone: noPhone.rows[0].n });
   } catch (err) {
@@ -225,7 +250,7 @@ async function getStats(req, res) {
 }
 
 module.exports = {
-  getAllUsers, updateUserRole, deleteUser,
+  getAllUsers, updateUserRole, updateUserPhone, deleteUser,
   getOrganizations, adjustCredits, setOrganizationActive,
   getRecipients, getStats,
 };

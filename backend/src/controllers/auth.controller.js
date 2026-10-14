@@ -74,10 +74,10 @@ async function register(req, res) {
     }
 
     const result = await client.query(
-      `INSERT INTO users (name, email, password_hash, role, organization_id, org_role)
-       VALUES ($1, $2, $3, $4, $5, 'owner')
+      `INSERT INTO users (name, email, password_hash, role, organization_id, org_role, phone)
+       VALUES ($1, $2, $3, $4, $5, 'owner', $6)
        RETURNING id, name, email, role, organization_id, org_role`,
-      [String(name).trim(), email, passwordHash, role, orgId]
+      [String(name).trim(), email, passwordHash, role, orgId, phone]
     );
 
     await client.query('COMMIT');
@@ -150,7 +150,7 @@ function adminLogin(req, res) {
 async function me(req, res) {
   try {
     const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.role, u.org_role, u.organization_id, u.created_at,
+      `SELECT u.id, u.name, u.email, u.role, u.org_role, u.organization_id, u.created_at, u.phone,
               o.name AS organization_name, o.type AS organization_type, o.credits
        FROM users u JOIN organizations o ON o.id = u.organization_id
        WHERE u.id = $1`,
@@ -160,7 +160,7 @@ async function me(req, res) {
       return res.status(404).json({ message: 'Хэрэглэгч олдсонгүй' });
     }
     const row = result.rows[0];
-    res.json({ ...publicUser(row), credits: row.credits, created_at: row.created_at });
+    res.json({ ...publicUser(row), credits: row.credits, phone: row.phone, created_at: row.created_at });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Серверийн алдаа' });

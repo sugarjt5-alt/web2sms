@@ -102,15 +102,17 @@ async function createMessage({
 
     const rec = await client.query(
       `INSERT INTO message_recipients
-         (message_id, contact_id, phone, content, segments, status, recipient_org_id, recipient_type, recipient_name)
-       SELECT $1, cid, ph, body, seg, 'pending', roid, rtype, rname
-       FROM unnest($2::int[], $3::text[], $4::text[], $5::int[], $6::int[], $7::text[], $8::text[])
-         AS t(cid, ph, body, seg, roid, rtype, rname)
+         (message_id, contact_id, phone, content, segments, status,
+          recipient_org_id, recipient_type, recipient_name, recipient_user_id)
+       SELECT $1, cid, ph, body, seg, 'pending', roid, rtype, rname, ruid
+       FROM unnest($2::int[], $3::text[], $4::text[], $5::int[], $6::int[], $7::text[], $8::text[], $9::int[])
+         AS t(cid, ph, body, seg, roid, rtype, rname, ruid)
        RETURNING id, phone, content`,
       [message.id, rows.map((r) => r.contact_id ?? null), rows.map((r) => r.phone),
         rows.map((r) => r.body), rows.map((r) => r.segments),
         rows.map((r) => r.recipient_org_id ?? null), rows.map((r) => r.recipient_type ?? null),
-        rows.map((r) => (r.recipient_org_id ? String(r.name || '').slice(0, 150) : null))]
+        rows.map((r) => (r.recipient_org_id || r.recipient_user_id ? String(r.name || '').slice(0, 150) : null)),
+        rows.map((r) => r.recipient_user_id ?? null)]
     );
     inserted = rec.rows;
 

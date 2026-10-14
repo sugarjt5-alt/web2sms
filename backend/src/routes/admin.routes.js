@@ -5,7 +5,7 @@ const requireRole = require('../middleware/role.middleware');
 const upload = require('../middleware/upload.middleware');
 const { importUsers } = require('../controllers/adminImport.controller');
 const {
-  getAllUsers, updateUserRole, deleteUser,
+  getAllUsers, updateUserRole, updateUserPhone, deleteUser,
   getOrganizations, adjustCredits, setOrganizationActive,
   getRecipients, getStats,
 } = require('../controllers/admin.controller');
@@ -22,6 +22,7 @@ router.get('/stats', getStats);
 router.get('/users', getAllUsers);
 router.post('/users/import', upload.single('file'), importUsers);
 router.put('/users/:id/role', updateUserRole);
+router.put('/users/:id/phone', updateUserPhone);
 router.delete('/users/:id', deleteUser);
 
 // Хэрэглэгчийн бүртгэл (кредит, утас, төлөв) — DB-д organizations хүснэгтэд хадгалагдана

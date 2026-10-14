@@ -32,7 +32,7 @@ export default function ProfilePage() {
           <div className="summary">
             <div className="summary-row"><span>Нэр</span><strong>{me.name}</strong></div>
             <div className="summary-row"><span>Имэйл</span><strong>{me.email}</strong></div>
-            <div className="summary-row"><span>Утас</span><strong className="mono">{account.phone || '—'}</strong></div>
+            <div className="summary-row"><span>Утас</span><strong className="mono">{me.phone || '—'}</strong></div>
             <div className="summary-row"><span>Кредит</span><strong className="mono">{account.credits}</strong></div>
           </div>
         </div>

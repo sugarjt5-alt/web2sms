@@ -31,6 +31,8 @@ export default function AdminUsersPage() {
   const [me, setMe] = useState(null);
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
+  const [noPhoneOnly, setNoPhoneOnly] = useState(false); // зөвхөн утасгүй хэрэглэгчид
+  const [editPhone, setEditPhone] = useState(null); // { id, value } — утас засаж буй мөр
   const [topUp, setTopUp] = useState({}); // { [accountId]: '100' }
   const [showImport, setShowImport] = useState(false);
   const [file, setFile] = useState(null);
@@ -49,6 +51,8 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     setMe(JSON.parse(localStorage.getItem('user') || 'null'));
+    // SMS илгээх хуудаснаас "Утас нэмэх" дарж ирсэн бол утасгүйчүүдийг шууд харуулна
+    if (new URLSearchParams(window.location.search).get('nophone')) setNoPhoneOnly(true);
     load();
     // Шинээр бүртгүүлсэн хэрэглэгчид хуудсыг шинэчлэхгүйгээр гарч ирнэ
     const timer = setInterval(load, REFRESH_MS);
@@ -60,8 +64,10 @@ export default function AdminUsersPage() {
     const q = search.trim().toLowerCase();
     return users
       .filter((u) => u.role !== 'admin')
+      .filter((u) => !noPhoneOnly || !u.phone)
       .filter((u) => !q || u.name.toLowerCase().includes(q) || u.email.includes(q) || (u.phone || '').includes(q));
-  }, [users, search]);
+  }, [users, search, noPhoneOnly]);
+  const noPhoneCount = users.filter((u) => u.role !== 'admin' && !u.phone).length;
 
   const isNew = (u) => Date.now() - new Date(u.created_at).getTime() < NEW_MS;
   const newCount = customers.filter(isNew).length;
@@ -80,6 +86,18 @@ export default function AdminUsersPage() {
       });
       setTopUp({ ...topUp, [u.organization_id]: '' });
       flash(true, `${u.name}: ${amount > 0 ? '+' : ''}${amount} кредит. Шинэ үлдэгдэл: ${res.credits}`);
+      load();
+    } catch (err) {
+      flash(false, err.message);
+    }
+  }
+
+  async function savePhone(e, u) {
+    e.preventDefault();
+    try {
+      await apiFetch(`/admin/users/${u.id}/phone`, { method: 'PUT', body: JSON.stringify({ phone: editPhone.value }) });
+      setEditPhone(null);
+      flash(true, `${u.name}: утас хадгалагдлаа`);
       load();
     } catch (err) {
       flash(false, err.message);
@@ -207,21 +225,23 @@ export default function AdminUsersPage() {
                 <li><strong>нууц үг</strong>: хоосон бол систем үүсгэнэ</li>
                 <li><strong>утас</strong>: SMS хүлээн авах дугаар</li>
               </ol>
+              <p style={{ marginTop: 8 }}>
+                Имэйл нь бүртгэлтэй хэрэглэгч байвал шинээр үүсгэхгүй, зөвхөн <strong>утсыг нь шинэчилнэ</strong>.
+              </p>
             </div>
           </div>
 
           {importResult && (
             <div style={{ marginTop: 18 }}>
-              <Alert type={importResult.created > 0 ? 'success' : 'warning'}>
+              <Alert type={importResult.created + (importResult.updated || 0) > 0 ? 'success' : 'warning'}>
                 <strong>{importResult.created}</strong> хэрэглэгч нэмэгдлээ
+                {importResult.updated > 0 && <>, <strong>{importResult.updated}</strong> хэрэглэгчийн утас шинэчлэгдлээ</>}
                 {importResult.skipped > 0 && `, ${importResult.skipped} мөр алгасагдлаа`}.
               </Alert>
-              {importResult.created > 0 && (
+              {withPasswords > 0 && (
                 <div className="secret-box">
                   <span style={{ flex: 1, minWidth: 200 }}>
-                    {withPasswords > 0
-                      ? <><strong>{withPasswords}</strong> хэрэглэгчийн нууц үгийг систем үүсгэсэн. Энэ файлыг <strong>одоо татаж</strong> хэрэглэгчдэд тараана уу. Дахин харагдахгүй.</>
-                      : 'Нэвтрэх мэдээллийн жагсаалтыг татаж авах боломжтой.'}
+                    <strong>{withPasswords}</strong> хэрэглэгчийн нууц үгийг систем үүсгэсэн. Энэ файлыг <strong>одоо татаж</strong> хэрэглэгчдэд тараана уу. Дахин харагдахгүй.
                   </span>
                   <button className="btn btn-secondary btn-sm" onClick={downloadCredentials}>
                     <Icon name="download" size={14} /> Нэвтрэх мэдээлэл татах
@@ -253,11 +273,19 @@ export default function AdminUsersPage() {
         <div className="card-header">
           <div>
             <h2>Жагсаалт</h2>
-            <p>20 секунд тутам автоматаар шинэчлэгдэнэ</p>
+            <p>20 секунд тутам автоматаар шинэчлэгдэнэ. Утасгүй хэрэглэгч SMS хүлээж авахгүй.</p>
           </div>
-          <div className="search" style={{ width: 260, maxWidth: '100%' }}>
-            <Icon name="search" size={16} />
-            <input placeholder="Нэр, имэйл, утсаар хайх" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {noPhoneCount > 0 && (
+              <label className="switch small">
+                <input type="checkbox" checked={noPhoneOnly} onChange={(e) => setNoPhoneOnly(e.target.checked)} />
+                Утасгүй ({noPhoneCount})
+              </label>
+            )}
+            <div className="search" style={{ width: 240, maxWidth: '100%' }}>
+              <Icon name="search" size={16} />
+              <input placeholder="Нэр, имэйл, утсаар хайх" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
           </div>
         </div>
         {customers.length === 0 ? (
@@ -278,7 +306,23 @@ export default function AdminUsersPage() {
                       </div>
                       <div className="muted small">{u.email}</div>
                     </td>
-                    <td className="mono small">{u.phone || '—'}</td>
+                    <td className="mono small" style={{ whiteSpace: 'nowrap' }}>
+                      {editPhone?.id === u.id ? (
+                        <form onSubmit={(e) => savePhone(e, u)} style={{ display: 'flex', gap: 4 }}>
+                          <input className="input-sm" autoFocus placeholder="99112233" value={editPhone.value}
+                            onChange={(e) => setEditPhone({ id: u.id, value: e.target.value })} style={{ width: 110 }} />
+                          <button className="btn btn-primary btn-sm" type="submit"><Icon name="check" size={13} /></button>
+                          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEditPhone(null)}>
+                            <Icon name="x" size={13} />
+                          </button>
+                        </form>
+                      ) : u.phone ? (
+                        <button className="btn btn-ghost btn-sm mono" title="Засах"
+                          onClick={() => setEditPhone({ id: u.id, value: u.phone })}>{u.phone}</button>
+                      ) : (
+                        <button className="chip" onClick={() => setEditPhone({ id: u.id, value: '' })}>+ Утас нэмэх</button>
+                      )}
+                    </td>
                     <td className="mono">{u.received_count}</td>
                     <td className="mono" style={{ fontWeight: 700 }}>{u.credits ?? 0}</td>
                     <td>

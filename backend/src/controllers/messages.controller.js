@@ -13,31 +13,32 @@ function sendError(res, err) {
   return res.status(500).json({ message: 'Серверийн алдаа' });
 }
 
-// Bulk SMS илгээх (зөвхөн системийн admin) — бүртгэлтэй хэрэглэгчдийн утас руу:
+// Bulk SMS илгээх (зөвхөн системийн admin) — хэрэглэгч бүрийн утас руу:
 //   audience: 'all' — бүх хэрэглэгч, эсвэл
-//   organizationIds — сонгосон хэрэглэгчдийн бүртгэлүүд (organizations.id).
-// Утасгүй, хаагдсан бүртгэл орохгүй. scheduledAt өгвөл тухайн цагт илгээнэ.
+//   userIds — сонгосон хэрэглэгчид.
+// Утасгүй хэрэглэгч, хаагдсан бүртгэл, admin-ууд орохгүй. Хэрэглэгчийн тоонд хязгаар байхгүй
+// (нэг дугаар давхардвал нэг л удаа явна). scheduledAt өгвөл тухайн цагт илгээнэ.
 // Мессеж дэх {нэр} нь хэрэглэгчийн нэрээр солигдоно. Admin-аас кредит хасагдахгүй.
 async function sendMessage(req, res) {
   const orgId = req.user.organizationId;
-  const { content, audience, organizationIds } = req.body;
+  const { content, audience, userIds } = req.body;
 
   try {
     const scheduledAt = parseSchedule(req.body.scheduledAt);
-    if (!audience && !Array.isArray(organizationIds)) {
+    if (audience !== 'all' && !Array.isArray(userIds)) {
       throw new MessageError(400, 'Хүлээн авагч сонгоно уу');
     }
 
-    const types = audience === 'individuals' ? ['individual']
-      : audience === 'organizations' ? ['organization'] : ['individual', 'organization'];
-    const ids = Array.isArray(organizationIds)
-      ? organizationIds.map(Number).filter((n) => Number.isInteger(n) && n > 0) : null;
+    const ids = Array.isArray(userIds)
+      ? userIds.map(Number).filter((n) => Number.isInteger(n) && n > 0) : null;
     const result = await pool.query(
-      `SELECT id AS recipient_org_id, type AS recipient_type, phone, name FROM organizations
-       WHERE phone IS NOT NULL AND is_active AND id <> $1
-         AND ($2::int[] IS NULL OR id = ANY($2::int[]))
-         AND ($2::int[] IS NOT NULL OR type = ANY($3::text[]))`,
-      [orgId, ids, types]
+      `SELECT u.id AS recipient_user_id, o.id AS recipient_org_id, 'individual' AS recipient_type,
+              u.phone, u.name
+       FROM users u JOIN organizations o ON o.id = u.organization_id
+       WHERE u.role <> 'admin' AND u.phone IS NOT NULL AND o.is_active
+         AND ($1::int[] IS NULL OR u.id = ANY($1::int[]))
+       ORDER BY u.id`,
+      [ids]
     );
     const recipients = result.rows;
 

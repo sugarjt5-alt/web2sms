@@ -1,6 +1,7 @@
 // Admin: CSV файлаас олон хэрэглэгч нэг дор оруулах.
 // Багана: нэр, имэйл, нууц үг (заавал биш — хоосон бол систем үүсгэнэ), утас (заавал биш)
 // Мөр бүр бүртгүүлсэн хэрэглэгчтэй ижил: өөрийн бүртгэл (кредит, утас) үүснэ.
+// Имэйл нь аль хэдийн бүртгэлтэй бол шинэ хэрэглэгч үүсгэхгүй, зөвхөн утсыг нь шинэчилнэ.
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
@@ -41,9 +42,10 @@ async function runImport(req, res) {
     return res.status(400).json({ message: `Нэг файлд дээд тал нь ${MAX_ROWS} мөр. Файлаа хуваана уу` });
   }
 
-  const results = []; // { row, email, name, status: 'created'|'skipped', reason?, password? }
+  const results = []; // { row, email, name, status: 'created'|'updated'|'skipped', reason?, password? }
   const seenEmails = new Set();
   const valid = [];
+  const phoneUpdates = []; // бүртгэлтэй имэйл + утас өгсөн мөр → тэр хэрэглэгчийн утсыг шинэчилнэ
 
   // 1) Мөр бүрийг шалгах
   const emailsInFile = rows.map((r) => normalizeEmail(r[1]));
@@ -60,8 +62,14 @@ async function runImport(req, res) {
     const skip = (reason) => results.push({ row: rowNo, email: email || r[1] || '', name, status: 'skipped', reason });
 
     if (seenEmails.has(email)) return skip('Файл дотор давхардсан имэйл');
-    if (existingEmails.has(email)) return skip('Имэйл системд бүртгэлтэй');
     if (rawPhone && !phone) return skip('Утасны дугаар буруу');
+    if (existingEmails.has(email)) {
+      // Бүртгэлтэй хэрэглэгч: утас өгсөн бол шинэчилнэ, үгүй бол алгасна
+      if (!phone) return skip('Имэйл системд бүртгэлтэй (утас өгөөгүй)');
+      seenEmails.add(email);
+      phoneUpdates.push({ rowNo, name, email, phone });
+      return undefined;
+    }
     const password = givenPassword || generatePassword();
     const invalid = validateNewUser({ name, email, password });
     if (invalid) return skip(invalid);
@@ -70,8 +78,8 @@ async function runImport(req, res) {
     valid.push({ rowNo, name, email, password, generated: !givenPassword, phone });
   });
 
-  if (valid.length === 0) {
-    return res.json({ created: 0, skipped: results.length, results });
+  if (valid.length === 0 && phoneUpdates.length === 0) {
+    return res.json({ created: 0, updated: 0, skipped: results.length, results });
   }
 
   // 2) Нууц үгийн hash (удаан хэсэг — transaction-оос гадуур)
@@ -87,15 +95,19 @@ async function runImport(req, res) {
         [v.name.slice(0, 150), v.phone]
       );
       await client.query(
-        `INSERT INTO users (name, email, password_hash, role, organization_id, org_role, created_via)
-         VALUES ($1, $2, $3, 'user', $4, 'owner', 'import')`,
-        [v.name, v.email, v.hash, account.rows[0].id]
+        `INSERT INTO users (name, email, password_hash, role, organization_id, org_role, created_via, phone)
+         VALUES ($1, $2, $3, 'user', $4, 'owner', 'import', $5)`,
+        [v.name, v.email, v.hash, account.rows[0].id, v.phone]
       );
       results.push({
         row: v.rowNo, email: v.email, name: v.name, phone: v.phone, status: 'created',
         // Автоматаар үүсгэсэн нууц үгийг admin-д нэг удаа буцаана (хэрэглэгчдэд тараах)
         password: v.generated ? v.password : undefined,
       });
+    }
+    for (const p of phoneUpdates) {
+      await client.query('UPDATE users SET phone = $1 WHERE LOWER(email) = $2', [p.phone, p.email]);
+      results.push({ row: p.rowNo, email: p.email, name: p.name, phone: p.phone, status: 'updated' });
     }
     await client.query('COMMIT');
   } catch (err) {
@@ -107,7 +119,12 @@ async function runImport(req, res) {
   }
 
   results.sort((a, b) => a.row - b.row);
-  res.json({ created: valid.length, skipped: results.length - valid.length, results });
+  res.json({
+    created: valid.length,
+    updated: phoneUpdates.length,
+    skipped: results.length - valid.length - phoneUpdates.length,
+    results,
+  });
 }
 
 module.exports = { importUsers, MAX_ROWS };

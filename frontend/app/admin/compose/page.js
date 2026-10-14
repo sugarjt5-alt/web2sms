@@ -118,7 +118,7 @@ export default function AdminComposePage() {
     setLoading(true);
     try {
       const body = { content };
-      if (audience === 'selected') body.organizationIds = selected;
+      if (audience === 'selected') body.userIds = selected;
       else body.audience = audience;
       if (scheduleOn) body.scheduledAt = new Date(scheduleAt).toISOString();
 
@@ -150,9 +150,10 @@ export default function AdminComposePage() {
             </div>
 
             {withoutPhone > 0 && (
-              <p className="muted small" style={{ marginBottom: 10 }}>
-                {withoutPhone} бүртгэл утасны дугааргүй тул жагсаалтад ороогүй. Хаагдсан бүртгэлүүд ч орохгүй.
-              </p>
+              <Alert type="warning">
+                <strong>{withoutPhone}</strong> хэрэглэгч утасны дугааргүй тул SMS очихгүй.{' '}
+                <a href="/admin/users?nophone=1" className="link">Утас нэмэх</a>
+              </Alert>
             )}
 
             {loaded && accounts.length === 0 ? (
