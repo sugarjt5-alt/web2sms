@@ -183,12 +183,23 @@ export default function AdminComposePage() {
                 </div>
               </>
             ) : (
-              <div className="invoice">
-                Бүх <strong>{recipients.length}</strong> хэрэглэгчийн утас руу илгээнэ.
-                <div className="muted small" style={{ marginTop: 4 }}>
-                  {'{нэр}'} нь хэрэглэгч бүрийн нэрээр солигдоно.
+              // Бүх хэрэглэгч: илгээх хүн бүрийг жагсаана (сонгох шаардлагагүй)
+              <>
+                <div className="search" style={{ marginBottom: 12 }}>
+                  <Icon name="search" size={16} />
+                  <input placeholder="Нэр эсвэл утсаар хайх" value={search} onChange={(e) => setSearch(e.target.value)} />
                 </div>
-              </div>
+                <div className="check-list">
+                  {filtered.map((a) => (
+                    <div className="check-row" key={a.id} style={{ cursor: 'default' }}>
+                      <Icon name="check" size={15} style={{ color: 'var(--success)' }} />
+                      <span>{a.name}</span>
+                      <span className="sub">{a.phone}</span>
+                    </div>
+                  ))}
+                  {filtered.length === 0 && <div className="empty small">Хайлтад тохирох хэрэглэгч алга</div>}
+                </div>
+              </>
             )}
           </div>
 
