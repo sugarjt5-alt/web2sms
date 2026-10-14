@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AppShell from '../../../components/AppShell';
 import Icon from '../../../components/Icon';
@@ -21,7 +21,6 @@ const AUDIENCES = [
 // Admin SMS илгээх: бүртгэлтэй хэрэглэгчид рүү. Кредит хасагдахгүй.
 export default function AdminComposePage() {
   const router = useRouter();
-  const textareaRef = useRef(null);
   const [templates, setTemplates] = useState([]);
   const [accounts, setAccounts] = useState([]); // бүртгэлтэй хэрэглэгчид (утастай, идэвхтэй)
   const [withoutPhone, setWithoutPhone] = useState(0);
@@ -62,14 +61,6 @@ export default function AdminComposePage() {
   function toggleAll() {
     const ids = filtered.map((a) => a.id);
     setSelected((prev) => (allFilteredSelected ? prev.filter((id) => !ids.includes(id)) : [...new Set([...prev, ...ids])]));
-  }
-
-  function insertPlaceholder() {
-    const el = textareaRef.current;
-    const start = el?.selectionStart ?? content.length;
-    const end = el?.selectionEnd ?? content.length;
-    setContent(`${content.slice(0, start)}{нэр}${content.slice(end)}`);
-    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(start + 5, start + 5); });
   }
 
   async function saveTemplate(e) {
@@ -217,12 +208,8 @@ export default function AdminComposePage() {
                 </select>
               )}
             </div>
-            <div className="toolbar">
-              <button type="button" className="chip" onClick={insertPlaceholder}>+ {'{нэр}'} оруулах</button>
-              <span className="muted small">Хүн бүрт өөрийн нэрээр нь очно</span>
-            </div>
-            <textarea ref={textareaRef} required value={content} onChange={(e) => setContent(e.target.value)}
-              placeholder={'Жишээ: Сайн байна уу {нэр}, ...'} />
+            <textarea required value={content} onChange={(e) => setContent(e.target.value)}
+              placeholder="SMS-ийн текстээ энд бичнэ үү..." />
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
               <span className="small" style={{ color: tooLong ? 'var(--danger)' : 'var(--muted)' }}>
                 {sms.length} тэмдэгт · {sms.segments} SMS
